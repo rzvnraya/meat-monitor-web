@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 import streamlit as st
 
@@ -24,7 +25,7 @@ def inisialisasi_database():
             durasi_hari REAL NOT NULL,
             skor_kesegaran REAL NOT NULL,
             status TEXT NOT NULL,
-            waktu_input TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            waktu_input TEXT NOT NULL
         )
     """
     )
@@ -33,15 +34,20 @@ def inisialisasi_database():
 
 
 def simpan_ke_sqlite(jenis, suhu, hari, skor, status):
-    """Menyimpan hasil analisis ke dalam database lokal."""
+    """Menyimpan hasil analisis ke dalam database dengan ZONA WAKTU WIB LOCAL."""
     conn = sqlite3.connect(PATH_DATABASE)
     cursor = conn.cursor()
+    
+    # === SOLUSI JAM ERROR: Mengunci ke Zona Waktu Asia/Jakarta (WIB = UTC+7) ===
+    tz_wib = timezone(timedelta(hours=7))
+    waktu_sekarang_wib = datetime.now(tz_wib).strftime("%Y-%m-%d %H:%M:%S")
+    
     cursor.execute(
         """
-        INSERT INTO log_kesegaran (komoditas, suhu, durasi_hari, skor_kesegaran, status)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO log_kesegaran (komoditas, suhu, durasi_hari, skor_kesegaran, status, waktu_input)
+        VALUES (?, ?, ?, ?, ?, ?)
     """,
-        (jenis, suhu, hari, skor, status),
+        (jenis, suhu, hari, skor, status, waktu_sekarang_wib),
     )
     conn.commit()
     conn.close()
@@ -56,13 +62,11 @@ def ambil_data_dari_sqlite():
     conn.close()
     
     # === MEMENUHI KRITERIA 2: PERULANGAN (FOR LOOP) ===
-    # Melakukan perulangan untuk membersihkan nama emoji dari komoditas demi kerapian data log
     data_bersih = []
     for baris in data_mentah:
-        komoditas_bersih = baris[0].split(" ")[0] # Mengambil kata utama saja (misal: "Daging ayam" tanpa emoji)
+        komoditas_bersih = baris[0].split(" ")[0]  # Membersihkan emoji
         baris_baru = (komoditas_bersih, baris[1], baris[2], baris[3], baris[4], baris[5])
-        data_clean = baris_baru
-        data_bersih.append(data_clean)
+        data_bersih.append(baris_baru)
         
     return data_bersih
 
@@ -167,7 +171,6 @@ def hitung_kesegaran(suhu, hari, jenis_pangan):
 # ==========================================
 st.set_page_config(page_title="Smart Meat Monitor v4.0", page_icon="🥩", layout="centered")
 
-# Jalankan inisialisasi tabel db
 inisialisasi_database()
 
 st.title("🥩 SMART MEAT MONITOR")
@@ -231,7 +234,7 @@ if riwayat_data:
             "Durasi (Hari)",
             "Skor (%)",
             "Status Kelayakan",
-            "Waktu Input",
+            "Waktu Input (WIB)",
         ],
     )
     st.dataframe(df, use_container_width=True)
