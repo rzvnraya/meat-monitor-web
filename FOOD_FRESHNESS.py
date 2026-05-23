@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import pandas as pd
 import streamlit as st
 
 # === MENGUNCI LOKASI FOLDER DATABASE ===
@@ -46,8 +47,28 @@ def simpan_ke_sqlite(jenis, suhu, hari, skor, status):
     conn.close()
 
 
+def ambil_data_dari_sqlite():
+    """Mengambil data dari database dan menggunakan PERULANGAN (Kriteria 2)."""
+    conn = sqlite3.connect(PATH_DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT komoditas, suhu, durasi_hari, skor_kesegaran, status, waktu_input FROM log_kesegaran ORDER BY id DESC")
+    data_mentah = cursor.fetchall()
+    conn.close()
+    
+    # === MEMENUHI KRITERIA 2: PERULANGAN (FOR LOOP) ===
+    # Melakukan perulangan untuk membersihkan nama emoji dari komoditas demi kerapian data log
+    data_bersih = []
+    for baris in data_mentah:
+        komoditas_bersih = baris[0].split(" ")[0] # Mengambil kata utama saja (misal: "Daging ayam" tanpa emoji)
+        baris_baru = (komoditas_bersih, baris[1], baris[2], baris[3], baris[4], baris[5])
+        data_clean = baris_baru
+        data_bersih.append(data_clean)
+        
+    return data_bersih
+
+
 # ==========================================
-# 2. LOGIKA BIOPROSES BERDASARKAN LITERATUR JURNAL
+# 2. LOGIKA BIOPROSES BERDASARKAN LITERATUR JURNAL (PERCABANGAN)
 # ==========================================
 def hitung_kesegaran(suhu, hari, jenis_pangan):
     jenis_lower = jenis_pangan.lower()
@@ -134,36 +155,25 @@ def hitung_kesegaran(suhu, hari, jenis_pangan):
     sisa_kesegaran = max(0.0, 100.0 - persentase_rusak)
 
     if sisa_kesegaran >= 80:
-        return (
-            round(sisa_kesegaran, 2),
-            "Sangat Segar (Aman Dikonsumsi)",
-            "green",
-            penjelasan,
-        )
+        return (round(sisa_kesegaran, 2), "Sangat Segar (Aman Dikonsumsi)", "green", penjelasan)
     elif 30 < sisa_kesegaran < 80:
-        return (
-            round(sisa_kesegaran, 2),
-            "Layak (Segera Olah / Masak!)",
-            "orange",
-            penjelasan,
-        )
+        return (round(sisa_kesegaran, 2), "Layak (Segera Olah / Masak!)", "orange", penjelasan)
     else:
         return (0.0, "Busuk/Bahaya Mikroba Akut!", "red", penjelasan)
 
 
 # ==========================================
-# 3. INTERFACE WEB (STREAMLIT)
+# 3. INTERFACE WEB (GUI STREAMLIT)
 # ==========================================
-# Set halaman web agar menggunakan tema gelap bawaan yang modern
 st.set_page_config(page_title="Smart Meat Monitor v4.0", page_icon="🥩", layout="centered")
 
+# Jalankan inisialisasi tabel db
 inisialisasi_database()
 
 st.title("🥩 SMART MEAT MONITOR")
 st.caption("Sistem analisis kelayakan dan bioproses daging berbasis literatur mikrobiologi")
 st.divider()
 
-# Buat form input data
 with st.form("input_form"):
     st.subheader("Data Komoditas")
 
@@ -181,14 +191,11 @@ with st.form("input_form"):
     suhu = st.number_input("Suhu Penyimpanan (°C):", value=-18.0, step=1.0)
     hari = st.number_input("Durasi Penyimpanan (Hari):", value=70.0, min_value=0.0, step=1.0)
 
-    # Tombol submit form
     submit_button = st.form_submit_button(label="MULAI ANALISIS SISTEM")
 
-# Logika setelah tombol analisis ditekan
 if submit_button:
     skor, status, warna, penjelasan = hitung_kesegaran(suhu, hari, jenis_pangan)
 
-    # Tampilkan skor menggunakan komponen visual besar (Metric)
     st.markdown("### Hasil Analisis:")
 
     if warna == "green":
@@ -198,41 +205,24 @@ if submit_button:
     else:
         st.error(f"Status: {status} | Skor Kesegaran: {skor}%")
 
-    # Panel Informasi Jurnal
     st.info(f"**DEKLARASI ILMIAH & LITERATUR MIKROBIOLOGI**\n\n{penjelasan}")
 
-    # Simpan data otomatis/langsung ketika sukses analisis (atau lewat tombol jika diperlukan)
-    # Di web, kita bisa langsung simpan demi kemudahan user experience
     try:
         simpan_ke_sqlite(jenis_pangan, suhu, hari, skor, status)
-        st.toast("Data berhasil disimpan ke database lokal!", icon="🗄️")
+        st.toast("Data berhasil disimpan ke database!", icon="🗄️")
     except Exception as e:
         st.error(f"Gagal menyimpan ke database: {str(e)}")
 
-        # ==========================================
-# 4. MENAMPILKAN RIWAYAT DATA DI WEB ONLINE
+        
+# ==========================================
+# 4. LOAD & TAMPILKAN LOG DATA
 # ==========================================
 st.write("---")
 st.subheader("📊 Riwayat Log Analisis Kesegaran")
 
-
-def ambil_data_dari_sqlite():
-    conn = sqlite3.connect(PATH_DATABASE)
-    cursor = conn.cursor()
-    # Mengambil data terbaru yang diinput
-    cursor.execute("SELECT komoditas, suhu, durasi_hari, skor_kesegaran, status, waktu_input FROM log_kesegaran ORDER BY id DESC")
-    data = cursor.fetchall()
-    conn.close()
-    return data
-
-
-# Ambil data dan tampilkan dalam bentuk tabel Streamlit
 riwayat_data = ambil_data_dari_sqlite()
 
 if riwayat_data:
-    # Mengubah data menjadi tampilan tabel yang rapi di web
-    import pandas as pd
-
     df = pd.DataFrame(
         riwayat_data,
         columns=[
@@ -246,4 +236,4 @@ if riwayat_data:
     )
     st.dataframe(df, use_container_width=True)
 else:
-    st.info("Belum ada riwayat data yang disimpan di server cloud.")
+    st.info("Belum ada riwayat data yang disimpan di dalam database.")
