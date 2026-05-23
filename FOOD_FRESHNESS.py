@@ -38,7 +38,6 @@ def simpan_ke_sqlite(jenis, suhu, hari, skor, status):
     conn = sqlite3.connect(PATH_DATABASE)
     cursor = conn.cursor()
     
-    # === SOLUSI JAM ERROR: Mengunci ke Zona Waktu Asia/Jakarta (WIB = UTC+7) ===
     tz_wib = timezone(timedelta(hours=7))
     waktu_sekarang_wib = datetime.now(tz_wib).strftime("%Y-%m-%d %H:%M:%S")
     
@@ -64,11 +63,24 @@ def ambil_data_dari_sqlite():
     # === MEMENUHI KRITERIA 2: PERULANGAN (FOR LOOP) ===
     data_bersih = []
     for baris in data_mentah:
-        komoditas_bersih = baris[0].split(" ")[0]  # Membersihkan emoji
+        # Perbaikan regex/split sederhana agar kata "ayam/sapi/ikan" tidak hilang
+        kata = baris[0].split(" ")
+        komoditas_bersih = " ".join([k for k in kata if not any(char in k for char in ["🍗", "🥩", "🐟", "🐐", "🧊"])])
+        komoditas_bersih = komoditas_bersih.strip()
+        
         baris_baru = (komoditas_bersih, baris[1], baris[2], baris[3], baris[4], baris[5])
         data_bersih.append(baris_baru)
         
     return data_bersih
+
+
+def hapus_semua_data():
+    """Menghapus seluruh isi data di dalam tabel log_kesegaran (Clear Data)."""
+    conn = sqlite3.connect(PATH_DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM log_kesegaran")
+    conn.commit()
+    conn.close()
 
 
 # ==========================================
@@ -181,7 +193,7 @@ with st.form("input_form"):
     st.subheader("Data Komoditas")
 
     jenis_pangan = st.selectbox(
-        "Pilih Kategori Daging:",
+        "Pihal Kategori Daging:",
         [
             "Daging ayam 🍗",
             "Daging sapi 🥩",
@@ -221,11 +233,25 @@ if submit_button:
 # 4. LOAD & TAMPILKAN LOG DATA
 # ==========================================
 st.write("---")
-st.subheader("📊 Riwayat Log Analisis Kesegaran")
+
+# Menggunakan kolom agar layout teks judul dan tombol hapus sejajar horizontal
+col_judul, col_tombol = st.columns([3, 1])
+
+with col_judul:
+    st.subheader("📊 Riwayat Log Analisis Kesegaran")
 
 riwayat_data = ambil_data_dari_sqlite()
 
 if riwayat_data:
+    with col_tombol:
+        # Tombol Clear Data dengan Popover Konfirmasi untuk keamanan
+        with st.popover("🗑️ Clear Data", use_container_width=True):
+            st.warning("Yakin ingin menghapus seluruh riwayat?")
+            if st.button("Ya, Hapus Semua", type="primary", use_container_width=True):
+                hapus_semua_data()
+                st.success("Database berhasil dibersihkan!")
+                st.rerun()
+
     df = pd.DataFrame(
         riwayat_data,
         columns=[
