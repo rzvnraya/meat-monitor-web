@@ -208,3 +208,42 @@ if submit_button:
         st.toast("Data berhasil disimpan ke database lokal!", icon="🗄️")
     except Exception as e:
         st.error(f"Gagal menyimpan ke database: {str(e)}")
+
+        # ==========================================
+# 4. MENAMPILKAN RIWAYAT DATA DI WEB ONLINE
+# ==========================================
+st.write("---")
+st.subheader("📊 Riwayat Log Analisis Kesegaran")
+
+
+def ambil_data_dari_sqlite():
+    conn = sqlite3.connect(PATH_DATABASE)
+    cursor = conn.cursor()
+    # Mengambil data terbaru yang diinput
+    cursor.execute("SELECT komoditas, suhu, durasi_hari, skor_kesegaran, status, waktu_input FROM log_kesegaran ORDER BY id DESC")
+    data = cursor.fetchall()
+    conn.close()
+    return data
+
+
+# Ambil data dan tampilkan dalam bentuk tabel Streamlit
+riwayat_data = ambil_data_dari_sqlite()
+
+if riwayat_data:
+    # Mengubah data menjadi tampilan tabel yang rapi di web
+    import pandas as pd
+
+    df = pd.DataFrame(
+        riwayat_data,
+        columns=[
+            "Komoditas",
+            "Suhu (°C)",
+            "Durasi (Hari)",
+            "Skor (%)",
+            "Status Kelayakan",
+            "Waktu Input",
+        ],
+    )
+    st.dataframe(df, use_container_width=True)
+else:
+    st.info("Belum ada riwayat data yang disimpan di server cloud.")
