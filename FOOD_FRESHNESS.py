@@ -4,14 +4,10 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import streamlit as st
 
-# === MENGUNCI LOKASI FOLDER DATABASE ===
 FOLDER_SCRIPT = os.path.dirname(os.path.abspath(__file__)) if __file__ else "."
 PATH_DATABASE = os.path.join(FOLDER_SCRIPT, "FOOD_MONITOR.db")
 
 
-# ==========================================
-# 1. FUNGSI DATABASE (SQLite)
-# ==========================================
 def inisialisasi_database():
     """Membuat file database dan tabel log jika belum ada."""
     conn = sqlite3.connect(PATH_DATABASE)
@@ -60,10 +56,8 @@ def ambil_data_dari_sqlite():
     data_mentah = cursor.fetchall()
     conn.close()
     
-    # === MEMENUHI KRITERIA 2: PERULANGAN (FOR LOOP) ===
     data_bersih = []
     for baris in data_mentah:
-        # Perbaikan regex/split sederhana agar kata "ayam/sapi/ikan" tidak hilang
         kata = baris[0].split(" ")
         komoditas_bersih = " ".join([k for k in kata if not any(char in k for char in ["🍗", "🥩", "🐟", "🐐", "🧊"])])
         komoditas_bersih = komoditas_bersih.strip()
@@ -83,15 +77,11 @@ def hapus_semua_data():
     conn.close()
 
 
-# ==========================================
-# 2. LOGIKA BIOPROSES BERDASARKAN LITERATUR JURNAL (PERCABANGAN)
-# ==========================================
 def hitung_kesegaran(suhu, hari, jenis_pangan):
     jenis_lower = jenis_pangan.lower()
     max_hari = 1.0
     penjelasan = ""
 
-    # --- KATEGORI 1: DAGING AYAM ---
     if "ayam" in jenis_lower:
         if suhu <= -10:
             max_hari = 300
@@ -107,7 +97,6 @@ def hitung_kesegaran(suhu, hari, jenis_pangan):
             max_hari = 0.16
             penjelasan = "⚠️ PERINGATAN BAHAYA (Standar CDC): Suhu lingkungan > 5°C memicu fase log (pembelahan eksponensial) Salmonella dan Campylobacter. Bakteri berkembang biak setiap 20 menit, membuat daging sangat berisiko memicu Salmonellosis."
 
-    # --- KATEGORI 2: DAGING SAPI ---
     elif "sapi" in jenis_lower:
         if suhu <= -10:
             max_hari = 270
@@ -127,7 +116,6 @@ def hitung_kesegaran(suhu, hari, jenis_pangan):
             max_hari = 0.08
             penjelasan = "⚠️ PERINGATAN KRITIS: Pada suhu ruang, daging sapi melepaskan drip loss (darah/cairan seluler) yang kaya akan asam amino. Bakteri Eschericia coli berkembang sangat agresif, memproduksi toksin berbahaya dalam waktu singkat."
 
-    # --- KATEGORI 3: DAGING IKAN ---
     elif "ikan" in jenis_lower:
         if suhu <= -10:
             max_hari = 120
@@ -142,7 +130,6 @@ def hitung_kesegaran(suhu, hari, jenis_pangan):
             max_hari = 0.06
             penjelasan = "⚠️ BAHAYA TOKSIN: Komoditas scombroid (seperti tongkol/tuna) di suhu ruang mengalami dekarboksilasi histidin menjadi histamin oleh bakteri. Ini memicu keracunan Scombroid Poisoning (alergi akut mendadak)."
 
-    # --- KATEGORI 4: DAGING KAMBING ---
     elif "kambing" in jenis_lower:
         if suhu <= -10:
             max_hari = 225
@@ -154,7 +141,6 @@ def hitung_kesegaran(suhu, hari, jenis_pangan):
             max_hari = 0.16
             penjelasan = "⚠️ PERINGATAN: Pembusukan berjalan aerobik. Bakteri Pseudomonas mempercepat degradasi protein daging kambing menjadi senyawa sulfur volatil, merusak total aroma dan mengundang lalat pembawa kontaminan."
 
-    # --- KATEGORI 5: FROZEN FOOD ---
     elif "beku" in jenis_lower or "frozen" in jenis_lower:
         if suhu <= -18:
             max_hari = 270
@@ -166,7 +152,6 @@ def hitung_kesegaran(suhu, hari, jenis_pangan):
             max_hari = 0.16
             penjelasan = "⚠️ DILARANG MEMBEKUKAN ULANG (Refreezing): Jika mencair di atas suhu ruang, spora bakteri aktif kembali. Membekukannya lagi hanya akan mengunci jutaan bakteri yang siap memicu pembusukan instan saat dicairkan nanti."
 
-    # --- KALKULASI AKHIR ---
     persentase_rusak = (hari / max_hari) * 100
     sisa_kesegaran = max(0.0, 100.0 - persentase_rusak)
 
@@ -178,9 +163,9 @@ def hitung_kesegaran(suhu, hari, jenis_pangan):
         return (0.0, "Busuk/Bahaya Mikroba Akut!", "red", penjelasan)
 
 
-# ==========================================
-# 3. INTERFACE WEB (GUI STREAMLIT)
-# ==========================================
+# ==============================
+# UI STREAMLIT
+# ==============================
 st.set_page_config(page_title="Smart Meat Monitor v4.0", page_icon="🥩", layout="centered")
 
 inisialisasi_database()
@@ -193,7 +178,7 @@ with st.form("input_form"):
     st.subheader("Data Komoditas")
 
     jenis_pangan = st.selectbox(
-        "Pihal Kategori Daging:",
+        "Pilih Kategori Daging:",
         [
             "Daging ayam 🍗",
             "Daging sapi 🥩",
@@ -205,6 +190,9 @@ with st.form("input_form"):
 
     suhu = st.number_input("Suhu Penyimpanan (°C):", value=-18.0, step=1.0)
     hari = st.number_input("Durasi Penyimpanan (Hari):", value=70.0, min_value=0.0, step=1.0)
+
+    # Menambahkan decision "Save Data?" sesuai Flowchart
+    simpan_data = st.checkbox("💾 Simpan data riwayat ke Database?", value=True)
 
     submit_button = st.form_submit_button(label="MULAI ANALISIS SISTEM")
 
@@ -222,19 +210,18 @@ if submit_button:
 
     st.info(f"**DEKLARASI ILMIAH & LITERATUR MIKROBIOLOGI**\n\n{penjelasan}")
 
-    try:
-        simpan_ke_sqlite(jenis_pangan, suhu, hari, skor, status)
-        st.toast("Data berhasil disimpan ke database!", icon="🗄️")
-    except Exception as e:
-        st.error(f"Gagal menyimpan ke database: {str(e)}")
+    # Eksekusi decision node dari Flowchart
+    if simpan_data:
+        try:
+            simpan_ke_sqlite(jenis_pangan, suhu, hari, skor, status)
+            st.toast("Data berhasil disimpan ke database log!", icon="🗄️")
+        except Exception as e:
+            st.error(f"Gagal menyimpan ke database: {str(e)}")
+    else:
+        st.toast("Analisis selesai tanpa menyimpan log.", icon="ℹ️")
 
-        
-# ==========================================
-# 4. LOAD & TAMPILKAN LOG DATA
-# ==========================================
 st.write("---")
 
-# Menggunakan kolom agar layout teks judul dan tombol hapus sejajar horizontal
 col_judul, col_tombol = st.columns([3, 1])
 
 with col_judul:
@@ -244,7 +231,6 @@ riwayat_data = ambil_data_dari_sqlite()
 
 if riwayat_data:
     with col_tombol:
-        # Tombol Clear Data dengan Popover Konfirmasi untuk keamanan
         with st.popover("🗑️ Clear Data", use_container_width=True):
             st.warning("Yakin ingin menghapus seluruh riwayat?")
             if st.button("Ya, Hapus Semua", type="primary", use_container_width=True):
