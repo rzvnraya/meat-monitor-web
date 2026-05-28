@@ -163,9 +163,7 @@ def hitung_kesegaran(suhu, hari, jenis_pangan):
         return (0.0, "Busuk/Bahaya Mikroba Akut!", "red", penjelasan)
 
 
-# ==============================
-# UI STREAMLIT
-# ==============================
+
 st.set_page_config(page_title="Smart Meat Monitor v4.0", page_icon="🥩", layout="centered")
 
 inisialisasi_database()
@@ -191,7 +189,6 @@ with st.form("input_form"):
     suhu = st.number_input("Suhu Penyimpanan (°C):", value=-18.0, step=1.0)
     hari = st.number_input("Durasi Penyimpanan (Hari):", value=70.0, min_value=0.0, step=1.0)
 
-    # Menambahkan decision "Save Data?" sesuai Flowchart
     simpan_data = st.checkbox("💾 Simpan data riwayat ke Database?", value=True)
 
     submit_button = st.form_submit_button(label="MULAI ANALISIS SISTEM")
@@ -210,7 +207,6 @@ if submit_button:
 
     st.info(f"**DEKLARASI ILMIAH & LITERATUR MIKROBIOLOGI**\n\n{penjelasan}")
 
-    # Eksekusi decision node dari Flowchart
     if simpan_data:
         try:
             simpan_ke_sqlite(jenis_pangan, suhu, hari, skor, status)
@@ -251,4 +247,4 @@ if riwayat_data:
     )
     st.dataframe(df, use_container_width=True)
 else:
-    st.info("Belum ada riwayat data yang disimpan di dalam database.")
+    st.info("Belum ada riwayat data yang disimpan di dalam database.") 
